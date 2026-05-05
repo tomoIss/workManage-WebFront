@@ -2,15 +2,95 @@ let currentClass = localStorage.getItem('currentClass') || '';
 let currentTasks = [];
 let existingClasses = []; // 既存のクラス一覧を保持する変数
 
+// オフライン検知を改善する関数
+async function isOnline() {
+    if (!navigator.onLine) return false;
+    try {
+        // 小さなリクエストで実際の接続を確認
+        const response = await fetch('./icon/icon-192.jpg', { method: 'HEAD', cache: 'no-cache', signal: AbortSignal.timeout(3000) });
+        return response.ok;
+    } catch {
+        return false;
+    }
+}
+
+function loadCachedTasks(className) {
+    try {
+        const raw = localStorage.getItem(`cachedTasks_${className}`);
+        if (!raw) return [];
+        const cached = JSON.parse(raw);
+        return Array.isArray(cached) ? cached : [];
+    } catch (e) {
+        console.warn('cachedTasks読み込み失敗', e);
+        return [];
+    }
+}
+
+function saveCachedTasks(className, tasks) {
+    try {
+        localStorage.setItem(`cachedTasks_${className}`, JSON.stringify(tasks));
+    } catch (e) {
+        console.warn('cachedTasks保存失敗', e);
+    }
+}
+
+function showNativePopup(message, options = {}) {
+    const popup = document.getElementById('native-popup');
+    const messageEl = document.getElementById('native-popup-message');
+    const actions = document.getElementById('native-popup-actions');
+
+    messageEl.innerText = message;
+    actions.innerHTML = '';
+    popup.classList.add('active');
+
+    if (options.type === 'confirm') {
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'cancel';
+        cancelBtn.innerText = options.cancelText || 'キャンセル';
+        cancelBtn.onclick = () => {
+            closeNativePopup();
+            if (typeof options.onCancel === 'function') options.onCancel();
+        };
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.innerText = options.confirmText || 'OK';
+        confirmBtn.onclick = () => {
+            closeNativePopup();
+            if (typeof options.onConfirm === 'function') options.onConfirm();
+        };
+
+        actions.appendChild(cancelBtn);
+        actions.appendChild(confirmBtn);
+    } else {
+        const okBtn = document.createElement('button');
+        okBtn.innerText = options.okText || '閉じる';
+        okBtn.onclick = () => {
+            closeNativePopup();
+            if (typeof options.onClose === 'function') options.onClose();
+        };
+        actions.appendChild(okBtn);
+    }
+}
+
+function closeNativePopup() {
+    const popup = document.getElementById('native-popup');
+    popup.classList.remove('active');
+}
+
 // --- 初期化 ---
 async function init() {
-    // 既存クラスのリストは常に最初に取得しておく（重複チェックのため）
-    await fetchClassListOnly();
-
     if (!currentClass) {
-        await showClassSelection(false);
+        showClassSelection(false);
     } else {
         updateHeader();
+        currentTasks = loadCachedTasks(currentClass);
+        if (currentTasks.length > 0) {
+            renderTasks(currentTasks);
+            const statusMsg = document.getElementById('status-msg');
+            statusMsg.style.display = 'block';
+            const online = await isOnline();
+            statusMsg.innerText = online ? '最新データを取得しています...' : 'オフライン中：前回のデータを表示しています';
+        }
         loadTasks();
     }
 }
@@ -20,8 +100,28 @@ async function fetchClassListOnly() {
     try {
         const data = await apiGetClassList();
         existingClasses = data.classes || [];
+        return existingClasses;
     } catch (e) {
         console.error("クラスリストの取得に失敗しました", e);
+        return existingClasses;
+    }
+}
+
+function updateClassSelectionButtons() {
+    const btnContainer = document.getElementById('class-list-buttons');
+    btnContainer.innerHTML = '';
+
+    if (existingClasses.length > 0) {
+        existingClasses.forEach(cls => {
+            if (['クラスリスト', '課題リストテンプレート', 'スクリプトログ'].includes(cls)) return;
+            const btn = document.createElement('button');
+            btn.className = 'class-btn';
+            btn.innerText = cls;
+            btn.onclick = () => selectClass(cls);
+            btnContainer.appendChild(btn);
+        });
+    } else {
+        btnContainer.innerHTML = '<p>既存のクラスはありません</p>';
     }
 }
 
@@ -41,34 +141,45 @@ async function showClassSelection(canCancel = true) {
     container.style.display = 'none';
     cancelBtn.style.display = canCancel ? 'inline-block' : 'none';
 
-    try {
-        // 表示の際にも最新のリストを取得
-        await fetchClassListOnly();
-        
-        const btnContainer = document.getElementById('class-list-buttons');
-        btnContainer.innerHTML = '';
+    const btnContainer = document.getElementById('class-list-buttons');
+    btnContainer.innerHTML = '';
+    document.getElementById('new-class-input').disabled = false;
+    document.querySelector('.new-class-btn').disabled = false;
 
-        if (existingClasses.length > 0) {
-            existingClasses.forEach(cls => {
-                if (['クラスリスト', '課題リストテンプレート', 'スクリプトログ'].includes(cls)) return;
-                const btn = document.createElement('button');
-                btn.className = 'class-btn';
-                btn.innerText = cls;
-                btn.onclick = () => selectClass(cls);
-                btnContainer.appendChild(btn);
-            });
-        } else {
-            btnContainer.innerHTML = '<p>既存のクラスはありません</p>';
-        }
-
+    // オフライン時はクラス変更を制限
+    const online = await isOnline();
+    if (!online) {
+        btnContainer.innerHTML = '<div style="color: #ff6b6b; font-weight: bold; padding: 20px; text-align: center;">現在オフラインのため、クラスを切り替えできません。</div>';
+        document.getElementById('new-class-input').disabled = true;
+        document.querySelector('.new-class-btn').disabled = true;
         loading.style.display = 'none';
         container.style.display = 'block';
-    } catch (e) {
-        alert("クラス一覧の表示に失敗しました。");
-        loading.style.display = 'none';
-        container.style.display = 'block';
+        showNativePopup('オフライン中はクラス変更できません。');
+        return;
     }
+
+    if (existingClasses.length > 0) {
+        updateClassSelectionButtons();
+    } else {
+        btnContainer.innerHTML = '<p>クラス一覧を読み込んでいます...</p>';
+    }
+
+    // 最新のリストをバックグラウンドで取得して更新
+    fetchClassListOnly()
+        .then(() => {
+            updateClassSelectionButtons();
+        })
+        .catch(() => {
+            if (existingClasses.length === 0) {
+                btnContainer.innerHTML = '<p>クラス一覧の取得に失敗しました。</p>';
+            }
+        })
+        .finally(() => {
+            loading.style.display = 'none';
+            container.style.display = 'block';
+        });
 }
+
 
 function selectClass(cls) {
     if (!cls) return;
@@ -79,11 +190,17 @@ function selectClass(cls) {
     loadTasks();
 }
 
-function createNewClass() {
+async function createNewClass() {
+    const online = await isOnline();
+    if (!online) {
+        showNativePopup('オフライン中は新しいクラスを作成できません。');
+        return;
+    }
+
     const inputElement = document.getElementById('new-class-input');
     const input = inputElement.value.trim();
     if (!input) {
-        alert("クラス名を入力してください");
+        showNativePopup('クラス名を入力してください。');
         return;
     }
     
@@ -115,7 +232,7 @@ function createNewClass() {
             });
 
             if (isExisting) {
-                alert(`既存のクラス「${normalized}」が見つかりました。既存のデータに接続します。`);
+                showNativePopup(`既存のクラス「${normalized}」が見つかりました。既存のデータに接続します。`);
             }
             
             // 接続処理へ
@@ -124,10 +241,10 @@ function createNewClass() {
             
         } catch (e) {
             // 万が一ここでエラーが起きても原因がわかるように表示
-            alert("処理中にエラーが発生しました: " + e.message);
+            showNativePopup("処理中にエラーが発生しました: " + e.message);
         }
     } else {
-        alert("クラス名の形式が正しくありません。\n「iss」という文字と、3つの数字を含めてください。\n(例: 3-4issR8, 3年4組issr8)");
+        showNativePopup("クラス名の形式が正しくありません。\n「iss」という文字と、3つの数字を含めてください。\n(例: 3-4issR8, 3年4組issr8)");
     }
 }
 
@@ -150,24 +267,47 @@ async function loadTasks() {
     const container = document.getElementById('task-list');
     container.innerHTML = '';
     statusMsg.style.display = 'block';
-    statusMsg.innerText = "チョークで書き込み中...";
+
+    const online = await isOnline();
+    const cachedTasks = loadCachedTasks(currentClass);
+    if (cachedTasks.length > 0) {
+        currentTasks = cachedTasks;
+        renderTasks(currentTasks);
+        statusMsg.innerText = online ? '最新データを取得しています...' : 'オフライン中：前回のデータを表示しています';
+    } else if (!online) {
+        statusMsg.innerText = 'オフライン中です。前回のデータがありません。';
+        return;
+    }
+
+    if (!online) {
+        return;
+    }
+
+    statusMsg.innerText = 'チョークで書き込み中...';
 
     try {
         const result = await apiGetTasks(currentClass);
 
-        if (result.status === "SUCCESS") {
+        if (result.status === 'SUCCESS') {
             currentTasks = result.tasks || [];
+            saveCachedTasks(currentClass, currentTasks);
             if (currentTasks.length === 0) {
-                statusMsg.innerText = "現在、課題はありません。";
+                statusMsg.innerText = '現在、課題はありません。';
+                container.innerHTML = '';
             } else {
                 statusMsg.style.display = 'none';
                 renderTasks(currentTasks);
             }
         } else {
-            statusMsg.innerText = "データエラー: " + result.status;
+            statusMsg.innerText = 'データエラー: ' + result.status;
         }
     } catch (error) {
-        statusMsg.innerHTML = `取得に失敗しました。<br><small>${error.message}</small>`;
+        if (cachedTasks.length > 0) {
+            statusMsg.innerHTML = `データ取得に失敗しました。前回のキャッシュを表示します。<br><small>${error.message}</small>`;
+            renderTasks(cachedTasks);
+        } else {
+            statusMsg.innerHTML = `取得に失敗しました。<br><small>${error.message}</small>`;
+        }
     }
 }
 
@@ -194,9 +334,14 @@ function closeModals() {
     document.getElementById('detail-modal').style.display = 'none';
 }
 
-function openAddModal() {
+async function openAddModal() {
+    const online = await isOnline();
+    if (!online) {
+        showNativePopup('オフライン中は課題の追加ができません。');
+        return;
+    }
     if (!currentClass) {
-        alert("先にクラスを設定してください。");
+        showNativePopup('先にクラスを設定してください。');
         promptClassChange();
         return;
     }
@@ -226,8 +371,13 @@ async function submitTask() {
     const detail = document.getElementById('add-detail').value.trim();
     const deadlineRaw = document.getElementById('add-deadline').value;
 
+    const online = await isOnline();
+    if (!online) {
+        showNativePopup('オフライン中は課題の追加ができません。');
+        return;
+    }
     if (!subject || !title || !deadlineRaw) {
-        alert("科目名、課題名、期限は必須です。");
+        showNativePopup('科目名、課題名、期限は必須です。');
         return;
     }
 
@@ -247,34 +397,46 @@ async function submitTask() {
         if (result.status === 'SUCCESS') {
             loadTasks();
         } else {
-            alert("追加エラー: " + result.status);
+            showNativePopup("追加エラー: " + result.status);
             document.getElementById('status-msg').style.display = 'none';
         }
     } catch (e) {
-        alert("通信エラー: " + e.message);
+        showNativePopup("通信エラー: " + e.message);
         document.getElementById('status-msg').style.display = 'none';
     }
 }
 
 async function confirmDelete(id) {
-    if (!confirm("本当にこの課題を削除しますか？")) return;
-    closeModals();
-    const payload = { action: 'delete', className: currentClass, id: id };
-
-    try {
-        document.getElementById('status-msg').style.display = 'block';
-        document.getElementById('status-msg').innerText = "削除処理中...";
-        const result = await apiDeleteTask(payload);
-        if (result.status === 'SUCCESS') {
-            loadTasks();
-        } else {
-            alert("削除エラー: " + result.status);
-            document.getElementById('status-msg').style.display = 'none';
-        }
-    } catch (e) {
-        alert("通信エラー: " + e.message);
-        document.getElementById('status-msg').style.display = 'none';
+    const online = await isOnline();
+    if (!online) {
+        showNativePopup('オフライン中は課題の削除ができません。');
+        return;
     }
+
+    showNativePopup('本当にこの課題を削除しますか？', {
+        type: 'confirm',
+        confirmText: '削除する',
+        cancelText: 'キャンセル',
+        onConfirm: async () => {
+            closeModals();
+            const payload = { action: 'delete', className: currentClass, id: id };
+
+            try {
+                document.getElementById('status-msg').style.display = 'block';
+                document.getElementById('status-msg').innerText = '削除処理中...';
+                const result = await apiDeleteTask(payload);
+                if (result.status === 'SUCCESS') {
+                    loadTasks();
+                } else {
+                    showNativePopup('削除エラー: ' + result.status);
+                    document.getElementById('status-msg').style.display = 'none';
+                }
+            } catch (e) {
+                showNativePopup('通信エラー: ' + e.message);
+                document.getElementById('status-msg').style.display = 'none';
+            }
+        }
+    });
 }
 
 function formatDateTime(isoString) {

@@ -4,14 +4,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>課題リスト</title>
-    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <title>課題リストDev</title>
+    <link rel="icon" type="image/x-icon" href="icon/favicon.ico">
     <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@700;900&display=swap" rel="stylesheet">
 
-    <!-- デザインはCSSファイルに -->
+    <!-- デザインはCSSファイル -->
     <link rel="stylesheet" href="css/style.css">
+    <link rel="manifest" href="manifest.json">
 
-    <!-- JavaScriptもjsに移動　※apiとuiの宣言順番は変えない -->
+    <!-- JavaScriptはjs下に　※apiとuiの宣言順番は変えない -->
     <script src="js/api.js"></script>
     <script src="js/ui.js"></script>
     
@@ -48,6 +49,14 @@
     <main id="task-list" class="task-grid"></main>
 
     <div id="status-msg">チョークで書き込み中...</div>
+
+    <!-- ネイティブ風ポップアップ -->
+    <div id="native-popup" class="native-popup" aria-live="assertive">
+        <div class="popup-card">
+            <div class="popup-message" id="native-popup-message"></div>
+            <div class="popup-actions" id="native-popup-actions"></div>
+        </div>
+    </div>
 
     <!-- 課題追加モーダル -->
     <div id="add-modal" class="modal">
@@ -97,5 +106,13 @@
             </div>
         </div>
     </div>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(registration => console.log('SW registered'))
+                .catch(error => console.log('SW registration failed'));
+        }
+    </script>
 </body>
 </html>
