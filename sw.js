@@ -1,4 +1,4 @@
-const CACHE_PREFIX = 'kadai-kanri-'; // 開発版専用のプレフィックス
+const CACHE_PREFIX = 'kadai-kanri-'; // 運用版専用のプレフィックス
 const CACHE_NAME = CACHE_PREFIX + 'v1.2';
 
 // キャッシュするファイルリスト
