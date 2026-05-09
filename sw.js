@@ -1,16 +1,15 @@
-const CACHE_PREFIX = 'kadai-kanri-'; // 運用版専用のプレフィックス
+const CACHE_PREFIX = 'kadai-kanri-'; 
 const CACHE_NAME = CACHE_PREFIX + 'v1.2';
 
-// キャッシュするファイルリスト
 const urlsToCache = [
   './',
-  './index.html',         // メインのファイル
-  './manifest.json',      // マニフェストファイルを追加
-  './css/style.css',      // CSSを追加
-  './js/api.js',          // JSを追加
-  './js/ui.js',           // JSを追加
-  './icon/icon-192.jpg',  // アイコン1
-  './icon/icon-512.jpg'   // アイコン2
+  './index.html',
+  './manifest.json',
+  './css/style.css',
+  './js/api.js',
+  './js/ui.js',
+  './icon/icon-192.jpg',
+  './icon/icon-512.jpg'
 ];
 
 self.addEventListener('install', (event) => {
@@ -25,18 +24,17 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then(response => {
-        // GETメゾットだけをキャッシュ
         if(event.request.method === 'GET') {
-          // レスポンスをキャッシュに保存（ネットワーク優先）
           const responseClone = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));          
         }
         return response;
       }).catch(() => {
-        // オフライン時は自分のキャッシュから取得
+        // 修正箇所：カッコの閉じ忘れ `});` を修正
         return caches.open(CACHE_NAME).then(cache => {
           return cache.match(event.request);
-        }); 
+        });
+      })
   );
 });
 
@@ -45,8 +43,11 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
-          // 「開発版の名前」で始まり、かつ「今の名前」じゃない時だけ消す
-          if (cacheName.startsWith(CACHE_PREFIX) && cacheName !== CACHE_NAME) {
+          // 修正箇所：運用版の削除条件を厳密にする
+          // 自分のPREFIXで始まり、かつ開発版(-dev-)ではなく、今の名前でもない場合のみ消す
+          if (cacheName.startsWith(CACHE_PREFIX) && 
+              !cacheName.includes('-dev-') && 
+              cacheName !== CACHE_NAME) {
             return caches.delete(cacheName);
           }
         })
