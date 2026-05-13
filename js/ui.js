@@ -37,6 +37,56 @@ function saveCachedTasks(className, tasks) {
     }
 }
 
+// 課題を一意に特定する指紋（ID+教科+課題名+期限）
+function getTaskFingerprint(task) {
+    const deadline = task.期限 ? new Date(task.期限).getTime() : 'no-deadline';
+    return `${task.課題id}-${task.教科}-${task.課題名}-${deadline}`;
+}
+
+// 完了リストの取得
+function getDoneTasks() {
+    return JSON.parse(localStorage.getItem('dev_done_tasks') || '[]');
+}
+
+/**
+ * 現在存在しない課題の完了キャッシュを削除する
+ * @param {Array} latestTasks - サーバーから取得した最新の課題リスト
+ */
+function cleanupDoneTasks(latestTasks) {
+    const doneList = getDoneTasks();
+    if (doneList.length === 0) return;
+
+    // 最新の課題リストから、存在するすべての指紋を取得
+    const validFingerprints = latestTasks.map(task => getTaskFingerprint(task));
+
+    // 今の完了リストの中で「最新リストに存在するもの」だけを残す
+    const cleanedList = doneList.filter(fingerprint => validFingerprints.includes(fingerprint));
+
+    // ストレージを更新
+    localStorage.setItem('dev_done_tasks', JSON.stringify(cleanedList));
+    console.log(`キャッシュを整理しました。保持中: ${cleanedList.length}件`);
+}
+
+// ステータス切り替え（ボタンから直接呼ばれる）
+function toggleTaskStatus(event, taskId) {
+    event.stopPropagation(); // 詳細画面が開くのを防ぐ
+
+    const task = currentTasks.find(t => t.課題id == taskId);
+    if (!task) return;
+
+    const fingerprint = getTaskFingerprint(task);
+    let doneList = getDoneTasks();
+
+    if (doneList.includes(fingerprint)) {
+        doneList = doneList.filter(f => f !== fingerprint);
+    } else {
+        doneList.push(fingerprint);
+    }
+
+    localStorage.setItem('dev_done_tasks', JSON.stringify(doneList));
+    renderTasks(currentTasks); // 画面を即座に更新
+}
+
 function showNativePopup(message, options = {}) {
     const popup = document.getElementById('native-popup');
     const messageEl = document.getElementById('native-popup-message');
@@ -294,6 +344,9 @@ async function loadTasks() {
         if (result.status === 'SUCCESS') {
             currentTasks = result.tasks || [];
             saveCachedTasks(currentClass, currentTasks);
+            // 課題進捗用のキャッシュで古いものを削除
+            cleanupDoneTasks(currentTasks);
+            
             if (currentTasks.length === 0) {
                 statusMsg.innerText = '現在、課題はありません。';
                 container.innerHTML = '';
@@ -314,24 +367,41 @@ async function loadTasks() {
     }
 }
 
+// 課題のデータを表示
 function renderTasks(tasks) {
     const container = document.getElementById('task-list');
     container.innerHTML = '';
+    const doneList = getDoneTasks();
+
     tasks.forEach(task => {
-        const card = document.createElement('div');
-        card.className = 'task-card';
-        card.onclick = () => openDetailModal(task.課題id);
-        card.innerHTML = `
-            <div class="subject">${task.教科 || "不明"}</div>
-            <div class="title">${task.課題名 || "無題の課題"}</div>
-            <div class="detail-badge">${task.詳細 || "==詳細なし=="}</div>
+        const isDone = doneList.includes(getTaskFingerprint(task));
+    
+    const card = document.createElement('div');
+
+    card.className = 'task-card';
+    card.onclick = () => openDetailModal(task.課題id);
+
+    card.innerHTML = `
+        <button class="status-toggle-btn ${isDone ? 'is-done' : ''}" 
+                onclick="toggleTaskStatus(event, '${task.課題id}')">
+            ${isDone ? '完了' : '未完了'}
+        </button>
+
+        <div class="subject">${task.教科 || "不明"}</div>
+        
+        <div class="title">${task.課題名 || "無題の課題"}</div>
+        
+        <div class="detail-badge">${task.詳細 || "==詳細なし=="}</div>
+        
+        <div class="task-footer">
             <div class="deadline">${formatDateTime(task.期限)}</div>
-        `;
-        container.appendChild(card);
+        </div>
+    `;
+    container.appendChild(card);
     });
 }
 
-// --- モーダル制御 ---
+/* --- モーダル制御 --- */
 function closeModals() {
     document.getElementById('add-modal').style.display = 'none';
     document.getElementById('detail-modal').style.display = 'none';
@@ -481,6 +551,4 @@ window.addEventListener('click',handleOutsideClick);
 // ipad対応用
 window.addEventListener('touchstart', handleOutsideClick, { passive: true });
 
-
 window.addEventListener('DOMContentLoaded', init);
-
