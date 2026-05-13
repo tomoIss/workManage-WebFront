@@ -548,7 +548,5 @@ const handleOutsideClick = (event) => {
 };
 //通常のクリック
 window.addEventListener('click',handleOutsideClick);
-// ipad対応用
-window.addEventListener('touchstart', handleOutsideClick, { passive: true });
 
 window.addEventListener('DOMContentLoaded', init);
