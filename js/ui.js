@@ -466,4 +466,21 @@ async function refreshTasks() {
     }
 }
 
+// --- モーダルの背景クリックで閉じる ---
+const handleOutsideClick = (event) => {
+    const detailModal = document.getElementById('detail-modal');
+    const addModal = document.getElementById('add-modal');
+
+    // event.target（実際に触れた要素）が、モーダルの背景要素そのものであるか判定
+    if (event.target === detailModal || event.target === addModal) {
+        closeModals();
+    }
+};
+//通常のクリック
+window.addEventListener('click',handleOutsideClick);
+// ipad対応用
+window.addEventListener('touchstart', handleOutsideClick, { passive: true });
+
+
 window.addEventListener('DOMContentLoaded', init);
+
