@@ -206,9 +206,14 @@ header {
     justify-content: center;
     align-items: center;
     padding: 20px;
+    /* ipadでのタップに対応するため */
+    cursor: pointer;
+    /* 背景への長押し選択を抑制 */
+    -webkit-tap-highlight-color: transparent;
 }
 
 .modal-content {
+    cursor: default;
     background-color: var(--menu-bg);
     color: #000;
     padding: 30px;
@@ -235,9 +240,9 @@ header {
 
 .close-btn {
     position: absolute;
-    top: 15px;
-    right: 20px;
-    font-size: 1.5rem;
+    top: 10px;
+    right: 15px;
+    font-size: 1.8rem;
     font-weight: bold;
     cursor: pointer;
     color: #666;
@@ -299,6 +304,7 @@ header {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 10px;
+    padding-right: 40px;
 }
 
 .detail-subject {
