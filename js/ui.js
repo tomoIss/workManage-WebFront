@@ -420,7 +420,19 @@ function renderTasks(tasks) {
     container.innerHTML = '';
     const doneList = getDoneTasks();
 
-    tasks.forEach(task => {
+    // 空のオブジェクトや、ID・教科・課題名がすべて空の無効なデータを弾く
+    const validTasks = tasks.filter(task => task && (task.課題id || task.教科 || task.課題名));
+    // 有効な課題が1つもない場合はメッセージを表示してカード作成を終了する
+    if (validTasks.length === 0) {
+        const statusMsg = document.getElementById('status-msg');
+        if (statusMsg) {
+            statusMsg.style.display = 'block';
+            statusMsg.innerText = '現在、課題はありません。';
+        }
+        return;
+    }
+
+    validTasks.forEach(task => {
         const isDone = doneList.includes(getTaskFingerprint(task));
     
     const card = document.createElement('div');
