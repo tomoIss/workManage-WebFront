@@ -1,5 +1,7 @@
 const KEY_CLASS = 'currentClass';
 const KEY_TASKS_PREFIX = 'cachedTasks_';
+const USER_NAME = 'userName';
+const DONE_TASKS = 'doneTasks';
 
 let currentClass = localStorage.getItem(KEY_CLASS) || '';
 let currentTasks = [];
@@ -47,7 +49,7 @@ function getTaskFingerprint(task) {
 
 // 完了リストの取得
 function getDoneTasks() {
-    return JSON.parse(localStorage.getItem('dev_done_tasks') || '[]');
+    return JSON.parse(localStorage.getItem(DONE_TASKS) || '[]');
 }
 
 /**
@@ -134,6 +136,12 @@ function closeNativePopup() {
 
 // --- 初期化 ---
 async function init() {
+    // ユーザー識別データがあるかチェック
+    if (!localStorage.getItem(USER_NAME)) {
+        showClassSelection(false);
+        document.getElementById('username-init-modal').style.display = 'flex';
+        return; 
+    }
     if (!currentClass) {
         showClassSelection(false);
     } else {
@@ -150,6 +158,21 @@ async function init() {
     }
 }
 
+/**
+ * 初回利用時のユーザー識別コード(userName)生成と保存
+ */
+function submitInitialUsername() {
+    const grade = document.getElementById('init-grade').value;
+    const cls = document.getElementById('init-class').value;
+    const attendanceNo = document.getElementById('init-attendance').value;
+    const school = document.getElementById('init-school').value;
+
+    const finalUserName = grade+cls+attendanceNo+school;
+    localStorage.setItem(USER_NAME, finalUserName);
+
+    document.getElementById('username-init-modal').style.display = 'none';
+}
+
 // クラスリストのみを取得して変数に格納する内部関数
 async function fetchClassListOnly() {
     try {
@@ -162,17 +185,28 @@ async function fetchClassListOnly() {
     }
 }
 
+// --- クラス選択画面のボタン表示（フィルタリング強化） ---
 function updateClassSelectionButtons() {
     const btnContainer = document.getElementById('class-list-buttons');
     btnContainer.innerHTML = '';
 
     if (existingClasses.length > 0) {
         existingClasses.forEach(cls => {
-            if (['クラスリスト', '課題リストテンプレート', 'スクリプトログ'].includes(cls)) return;
+            const clsStr = String(cls);
+            
+            // 除外条件:
+            // 1. 特定の名前のシート
+            // 2. 空白データ
+            // 3. 日付形式（2026-03... のようなISO文字列）を除外
+            const isSystemSheet = ['クラスリスト', '課題リストテンプレート', 'スクリプトログ'].includes(clsStr);
+            const isIsoDate = /^\d{4}-\d{2}-\d{2}/.test(clsStr); // 日付形式の正規表現チェック
+
+            if (isSystemSheet || !clsStr.trim() || isIsoDate) return;
+
             const btn = document.createElement('button');
             btn.className = 'class-btn';
-            btn.innerText = cls;
-            btn.onclick = () => selectClass(cls);
+            btn.innerText = clsStr;
+            btn.onclick = () => selectClass(clsStr);
             btnContainer.appendChild(btn);
         });
     } else {
@@ -198,20 +232,32 @@ async function showClassSelection(canCancel = true) {
 
     const btnContainer = document.getElementById('class-list-buttons');
     btnContainer.innerHTML = '';
-    document.getElementById('new-class-input').disabled = false;
-    document.querySelector('.new-class-btn').disabled = false;
 
-    // オフライン時はクラス変更を制限
+    // セレクトボックスとボタンの要素を取得
+    const gradeSel = document.getElementById('new-class-grade');
+    const classSel = document.getElementById('new-class-class');
+    const schoolSel = document.getElementById('new-class-school');
+    const createBtn = document.querySelector('.new-class-btn');
+
     const online = await isOnline();
     if (!online) {
         btnContainer.innerHTML = '<div style="color: #ff6b6b; font-weight: bold; padding: 20px; text-align: center;">現在オフラインのため、クラスを切り替えできません。</div>';
-        document.getElementById('new-class-input').disabled = true;
-        document.querySelector('.new-class-btn').disabled = true;
+        if (gradeSel) gradeSel.disabled = true;
+        if (classSel) classSel.disabled = true;
+        if (schoolSel) schoolSel.disabled = true;
+        if (createBtn) createBtn.disabled = true;
+        
         loading.style.display = 'none';
         container.style.display = 'block';
         showNativePopup('オフライン中はクラス変更できません。');
         return;
     }
+
+    // オンライン時は有効化
+    if (gradeSel) gradeSel.disabled = false;
+    if (classSel) classSel.disabled = false;
+    if (schoolSel) schoolSel.disabled = false;
+    if (createBtn) createBtn.disabled = false;
 
     if (existingClasses.length > 0) {
         updateClassSelectionButtons();
@@ -219,7 +265,6 @@ async function showClassSelection(canCancel = true) {
         btnContainer.innerHTML = '<p>クラス一覧を読み込んでいます...</p>';
     }
 
-    // 最新のリストをバックグラウンドで取得して更新
     fetchClassListOnly()
         .then(() => {
             updateClassSelectionButtons();
@@ -245,6 +290,23 @@ function selectClass(cls) {
     loadTasks();
 }
 
+// 学校の年度ベース（令和）を計算して「R8」などの文字列を返すヘルパー関数
+function getSchoolYearCode() {
+    const now = new Date();
+    let year = now.getFullYear();
+    const month = now.getMonth() + 1; // 1〜12
+
+    // 1月〜3月は「前年度」扱いにする
+    if (month >= 1 && month <= 3) {
+        year -= 1;
+    }
+
+    // 令和の計算（西暦から2018を引く。2026年なら 2026 - 2018 = 8）
+    const reiwaYear = year - 2018;
+    return `R${reiwaYear}`;
+}
+
+// --- 新規クラス作成（重複チェックとセレクトボックス連携） ---
 async function createNewClass() {
     const online = await isOnline();
     if (!online) {
@@ -252,54 +314,37 @@ async function createNewClass() {
         return;
     }
 
-    const inputElement = document.getElementById('new-class-input');
-    const input = inputElement.value.trim();
-    if (!input) {
-        showNativePopup('クラス名を入力してください。');
-        return;
-    }
+    // HTMLのセレクトボックスから値を取得
+    const grade = document.getElementById('new-class-grade').value;
+    const clsNum = document.getElementById('new-class-class').value;
+    const school = document.getElementById('new-class-school').value;
+    const year = getSchoolYearCode();
     
-    // 1. 入力値の正規化 (String変換を挟んで安全にする)
-    let normalized = String(input).replace(/[Ａ-Ｚａ-ｚ０-９]/g, (s) => {
-        return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
-    }).toLowerCase();
+    // クラス名の形式を整形 (例: 3-4issR8)
+    // ※末尾の R8 は以前の運用ルールに合わせて付与しています
+    const normalized = `${grade}-${clsNum}${school}${year}`;
 
-    normalized = normalized.replace(/年/g, '-').replace(/組/g, '');
-    normalized = normalized.replace(/iss/g, 'iss').replace(/r/g, 'R');
+    try {
+        // 既存のクラスリスト（existingClasses）から重複を確認
+        const isExisting = existingClasses.some(cls => {
+            if (!cls) return false;
+            // 念のため小文字・空白を揃えて比較
+            return String(cls).trim().toLowerCase() === normalized.toLowerCase();
+        });
 
-    const hasIss = /iss/i.test(normalized);
-    const digitCount = (normalized.match(/\d/g) || []).length;
-
-    if (hasIss && digitCount >= 3) {
-        try {
-            // --- 修正: エラーでクラッシュしないための安全な比較 ---
-            const isExisting = existingClasses.some(cls => {
-                if (!cls) return false; // 空データはスキップ
-                
-                // GASのデータが数値型などで渡ってきてもエラーにならないよう String(cls) で文字列化
-                let checkCls = String(cls).replace(/[Ａ-Ｚａ-ｚ０-９]/g, (s) => {
-                    return String.fromCharCode(s.charCodeAt(0) - 0xFEE0);
-                }).toLowerCase();
-                
-                checkCls = checkCls.replace(/年/g, '-').replace(/組/g, '').replace(/iss/g, 'iss').replace(/r/g, 'R');
-                
-                return checkCls === normalized;
-            });
-
-            if (isExisting) {
-                showNativePopup(`既存のクラス「${normalized}」が見つかりました。既存のデータに接続します。`);
-            }
-            
-            // 接続処理へ
-            selectClass(normalized);
-            inputElement.value = '';
-            
-        } catch (e) {
-            // 万が一ここでエラーが起きても原因がわかるように表示
-            showNativePopup("処理中にエラーが発生しました: " + e.message);
+        if (isExisting) {
+            // すでに存在する場合は、作成せずそのまま接続
+            showNativePopup(`既存のクラス「${normalized}」が見つかりました。接続します。`);
+        } else {
+            // 存在しない場合は新規作成（旧来の selectClass で作成処理へ）
+            showNativePopup(`新規クラス「${normalized}」を作成します。`);
         }
-    } else {
-        showNativePopup("クラス名の形式が正しくありません。\n「iss」という文字と、3つの数字を含めてください。\n(例: 3-4issR8, 3年4組issr8)");
+        
+        // 最終的な接続処理
+        selectClass(normalized);
+        
+    } catch (e) {
+        showNativePopup("処理中にエラーが発生しました: " + e.message);
     }
 }
 
@@ -464,18 +509,34 @@ async function submitTask() {
         return;
     }
 
+    // localStorageからuserNameを取得
+    const storedUsername = localStorage.getItem(USER_NAME);
+    if (!storedUsername) {
+        showNativePopup('ユーザー情報が消えています。再設定してください。');
+        init(); // 再度モーダルを出すためにinitを呼ぶ
+        return;
+    }
+
     const d = new Date(deadlineRaw);
     const formattedDeadline = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${d.getMinutes()}`;
     const payload = {
         action: 'add',
         className: currentClass,
-        task: { subject, title, detail, deadline: formattedDeadline }
+        task: { 
+            subject: subject, 
+            title: title, 
+            detail: detail, 
+            deadline: formattedDeadline, 
+            username: storedUsername
+        }
     };
+    
 
     try {
         closeModals();
         document.getElementById('status-msg').style.display = 'block';
         document.getElementById('status-msg').innerText = "追加処理中...";
+        
         const result = await apiAddTask(payload);
         if (result.status === 'SUCCESS') {
             loadTasks();
@@ -532,7 +593,6 @@ function formatDateTime(isoString) {
 // --- 追加: 更新処理（ui.jsの末尾などへ） ---
 async function refreshTasks() {
     const icon = document.querySelector('.refresh-icon');
-    
     // アイコンを回転させるアニメーションクラスを付与
     icon.classList.add('spinning');
     
