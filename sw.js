@@ -1,3 +1,7 @@
+/* プロジェクトURL 
+https://github.com/tomoIss/workManage-WebFront
+ここを見ているのはきっとUT先生やTTM先生辺りでしょう
+*/
 const CACHE_PREFIX = 'kadai-kanri-'; 
 const CACHE_NAME = CACHE_PREFIX + 'v1.4';
 
@@ -30,7 +34,6 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       }).catch(() => {
-        // 修正箇所：カッコの閉じ忘れ `});` を修正
         return caches.open(CACHE_NAME).then(cache => {
           return cache.match(event.request);
         });
@@ -43,7 +46,6 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
-          // 修正箇所：運用版の削除条件を厳密にする
           // 自分のPREFIXで始まり、かつ開発版(-dev-)ではなく、今の名前でもない場合のみ消す
           if (cacheName.startsWith(CACHE_PREFIX) && 
               !cacheName.includes('-dev-') && 
