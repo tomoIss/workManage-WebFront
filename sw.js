@@ -3,7 +3,7 @@ https://github.com/tomoIss/workManage-WebFront
 ここを見ているのはきっとUT先生やTTM先生辺りでしょう
 */
 const CACHE_PREFIX = 'kadai-kanri-'; 
-const CACHE_NAME = CACHE_PREFIX + 'v1.4';
+const CACHE_NAME = CACHE_PREFIX + 'v1.5';
 
 const urlsToCache = [
   './',
