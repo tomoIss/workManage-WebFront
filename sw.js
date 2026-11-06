@@ -1,6 +1,5 @@
 /* プロジェクトURL 
 https://github.com/tomoIss/workManage-WebFront
-ここを見ているのはきっとUT先生やTTM先生辺りでしょう
 */
 const CACHE_PREFIX = 'kadai-kanri-'; 
 const CACHE_NAME = CACHE_PREFIX + 'v1.6';
@@ -11,7 +10,10 @@ const urlsToCache = [
   './manifest.json',
   './css/style.css',
   './js/api.js',
-  './js/ui.js',
+  './js/app.js',       // ★ ui.js を app.js に変更
+  './js/storage.js',   // 分割したファイルを使っている場合
+  './js/utils.js',
+  './js/modal.js',
   './icon/icon-192.jpg',
   './icon/icon-512.jpg'
 ];

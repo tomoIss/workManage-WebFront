@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>課題管理</title>
+    <title>課題リスト</title>
     <link rel="icon" type="image/x-icon" href="icon/favicon.ico">
     <!-- fontsの読み込みを早め遅延を減らす -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,12 +16,11 @@
 
     <!-- デザインはCSSファイル -->
     <link rel="stylesheet" href="css/style.css">
-    
-    <!-- JavaScriptはjs下に　※apiとuiの宣言順番は変えない -->
-    <script src="js/api.js"></script>
-    <script src="js/ui.js"></script>
-
     <link rel="manifest" href="manifest.json">
+
+    <!-- JavaScriptはjs下に　※apiとui the宣言順番は変えない -->
+    <script src="js/api.js"></script>
+    <script type="module" src="./js/app.js"></script>
     
 </head>
 
@@ -39,7 +38,7 @@
                 <!-- クラスボタンがここに追加される -->
             </div>
             
-            <!-- 選択式入力フォーム（セレクトボックス）-->
+            <!-- 【変更箇所】ここから：入力フォームを選択式（セレクトボックス）に修正 -->
             <div class="new-class-group">
                 <p style="margin-top:0; font-weight:bold; color:#666;">リストにない場合は新規作成</p>
                 <div style="display: flex; gap: 6px; margin-bottom: 10px;">
@@ -65,6 +64,7 @@
                 </div>
                 <button class="new-class-btn" style="width: 100%; padding: 10px;" onclick="createNewClass()">作成</button>
             </div>
+
             <button class="btn" style="margin-top: 20px; background:#eee;" onclick="closeClassSelection()"
                 id="close-selection-btn" style="display:none;">キャンセル</button>
         </div>
@@ -72,15 +72,22 @@
 
     <header>
         <div class="menu-label" onclick="promptClassChange()" id="header-class-name">未設定<br>課題リスト</div>
-    
         <button class="refresh-btn" onclick="refreshTasks()" title="データ更新">
             <span class="refresh-icon">🔄</span>
         </button>
-
         <button class="add-btn" onclick="openAddModal()">新たな課題の追加</button>
     </header>
 
+    <!-- ★追加：表示切替トグル -->
+    <div class="view-toggle-bar">
+        <button id="toggle-list-btn" class="toggle-btn active" onclick="switchView('list')">🗂️ カード表示</button>
+        <button id="toggle-cal-btn" class="toggle-btn" onclick="switchView('calendar')">📅 カレンダー表示</button>
+    </div>
+
     <main id="task-list" class="task-grid"></main>
+
+    <!-- ★追加：カレンダー表示用コンテナ -->
+    <div id="calendar-view" style="display: none;"></div>
 
     <div id="status-msg">チョークで書き込み中...</div>
 
@@ -105,8 +112,7 @@
                     </label>
                 </div>
                 <div class="form-group">
-                    <label>
-                        課題名
+                    <label>課題名
                         <input type="text" id="add-title" placeholder="例: プリントP10~15">
                     </label>
                 </div>
@@ -213,10 +219,9 @@
 
     <script>
         if ('serviceWorker' in navigator) {
-            // scopeを './' に指定することで、このリポジトリ内だけを管理対象にする
-            navigator.serviceWorker.register('/workManage-WebFront/sw.js', { scope: '/workManage-WebFront/' })
-                .then(registration => console.log('SW registered with scope:', registration.scope))
-                .catch(error => console.log('SW registration failed:', error));
+            navigator.serviceWorker.register('sw.js', { scope: './' })
+                .then(registration => console.log('SW-DEV registered with scope:', registration.scope))
+                .catch(error => console.log('SW-DEV registration failed:', error));
         }
     </script>
 </body>
